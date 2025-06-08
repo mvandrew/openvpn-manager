@@ -315,10 +315,10 @@ post_install_check() {
     done
     
     # Проверка конфигурации
-    if [ -f "/etc/openvpn/openvpn.conf" ]; then
-        echo -e "${GREEN}✓ Конфигурационный файл создан${NC}"
+    if [ -f "/etc/openvpn/manager.conf" ]; then
+        echo -e "${GREEN}✓ Конфигурационный файл менеджера создан${NC}"
     else
-        echo -e "${RED}✗ Конфигурационный файл не создан${NC}"
+        echo -e "${RED}✗ Конфигурационный файл менеджера не создан${NC}"
         ((errors++))
     fi
     
