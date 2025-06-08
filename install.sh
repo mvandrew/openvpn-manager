@@ -47,12 +47,25 @@ check_dependencies() {
     
     # Проверка обязательных пакетов
     for pkg in "${required_packages[@]}"; do
-        if ! command -v $pkg &> /dev/null; then
-            echo -e "${RED}✗ $pkg не установлен${NC}"
-            deps_missing=true
-        else
-            echo -e "${GREEN}✓ $pkg установлен${NC}"
-        fi
+        case $pkg in
+            "easy-rsa")
+                # Специальная проверка для easy-rsa в Ubuntu/Debian
+                if [ -d "/usr/share/easy-rsa" ] || [ -d "/usr/share/doc/easy-rsa" ] || command -v easyrsa &> /dev/null; then
+                    echo -e "${GREEN}✓ $pkg установлен${NC}"
+                else
+                    echo -e "${RED}✗ $pkg не установлен${NC}"
+                    deps_missing=true
+                fi
+                ;;
+            *)
+                if ! command -v $pkg &> /dev/null; then
+                    echo -e "${RED}✗ $pkg не установлен${NC}"
+                    deps_missing=true
+                else
+                    echo -e "${GREEN}✓ $pkg установлен${NC}"
+                fi
+                ;;
+        esac
     done
     
     # Проверка опциональных пакетов
