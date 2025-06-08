@@ -227,6 +227,45 @@ sudo openvpn-manager
 sudo vpn-logs
 ```
 
+#### Ошибка "failed to find GID for group nobody"
+**Проблема:** В Ubuntu/Debian группа называется `nogroup`, а не `nobody`.
+
+**Симптомы:**
+- Сервер не запускается
+- В логах ошибка: `failed to find GID for group nobody`
+- Статус службы показывает `exit-code`
+
+**Решение:**
+```bash
+# Исправить группу в конфигурации
+sed -i 's/group nobody/group nogroup/' /etc/openvpn/server.conf
+
+# Перезапустить сервер
+systemctl restart openvpn@server
+systemctl status openvpn@server
+```
+
+#### Отсутствует файл CRL (Certificate Revocation List)
+**Проблема:** Ошибка `--crl-verify fails with '/etc/openvpn/crl.pem': No such file or directory`
+
+**Решение:**
+```bash
+# Создать CRL файл
+cd /etc/openvpn/easy-rsa
+./easyrsa gen-crl
+cp pki/crl.pem /etc/openvpn/crl.pem
+chmod 644 /etc/openvpn/crl.pem
+
+# Перезапустить сервер
+systemctl restart openvpn@server
+```
+
+**Альтернативное решение (временное):**
+```bash
+# Отключить проверку CRL
+sed -i 's/^crl-verify/#crl-verify/' /etc/openvpn/server.conf
+```
+
 ### Клиент не подключается
 1. Проверьте, что порт открыт в файрволе
 2. Убедитесь, что IP сервера правильный
@@ -237,6 +276,22 @@ sudo vpn-logs
 # Проверить PKI
 cd /etc/openvpn/easy-rsa
 ./easyrsa show-ca
+```
+
+### Диагностика проблем запуска
+```bash
+# Проверить подробные логи
+tail -50 /var/log/openvpn/openvpn.log
+
+# Запустить OpenVPN в режиме отладки
+openvpn --config /etc/openvpn/server.conf --verb 4
+
+# Проверить наличие всех файлов
+ls -la /etc/openvpn/{ca.crt,server.crt,server.key,dh.pem,ta.key,crl.pem}
+
+# Проверить права доступа
+chmod 644 /etc/openvpn/{ca.crt,server.crt,dh.pem,ta.key,crl.pem}
+chmod 600 /etc/openvpn/server.key
 ```
 
 ## 📅 Автоматические задачи
