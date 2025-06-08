@@ -1,0 +1,32 @@
+# --- JetBrains (PhpStorm, IntelliJ IDEA, PyCharm, WebStorm, etc.) ---
+.idea/
+*.iml
+out/
+
+# --- Visual Studio Code ---
+.vscode/
+.vscode/*
+
+# --- Sublime Text ---
+*.sublime-project
+*.sublime-workspace
+
+# --- Eclipse ---
+.metadata/
+*.classpath
+*.project
+*.settings/
+
+# --- NetBeansIDE ---
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbproject/Makefile-debug.mk
+/nbproject/Makefile-release.mk
+
+# --- Other general IDE files ---
+*.swp
+*.swo
+*~
+*.DS_Store
+Thumbs.db
