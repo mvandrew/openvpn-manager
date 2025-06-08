@@ -32,8 +32,17 @@ if [ -z "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Загрузка конфигурации
-source "$CONFIG_FILE"
+# Загрузка библиотеки функций
+LIB_DIR="${SCRIPT_DIR}/lib"
+if [ -f "${LIB_DIR}/functions.sh" ]; then
+    source "${LIB_DIR}/functions.sh"
+else
+    echo -e "${RED}Ошибка: Библиотека функций не найдена!${NC}"
+    exit 1
+fi
+
+# Инициализация конфигурации
+init_config_vars "$CONFIG_FILE"
 
 # Проверка прав root
 if [[ $EUID -ne 0 ]]; then

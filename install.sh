@@ -85,7 +85,7 @@ create_directories() {
     mkdir -p "$INSTALL_DIR"
     mkdir -p "/etc/openvpn/client"
     mkdir -p "/etc/openvpn/backup"
-    mkdir -p "/etc/openvpn/log"
+    mkdir -p "/var/log/openvpn"
     
     # Настройка прав
     chmod 755 "$INSTALL_DIR"
@@ -108,6 +108,16 @@ install_scripts() {
         "bulk-operations.sh"
         "openvpn-monitor.sh"
     )
+    
+    # Копирование библиотеки функций
+    if [ -d "lib" ]; then
+        mkdir -p "$INSTALL_DIR/lib"
+        cp -r lib/* "$INSTALL_DIR/lib/"
+        chmod 644 "$INSTALL_DIR/lib/"*.sh
+        echo -e "${GREEN}✓ Библиотека функций установлена${NC}"
+    else
+        echo -e "${YELLOW}⚠ Директория lib не найдена${NC}"
+    fi
     
     # Копирование скриптов
     for script in "${scripts[@]}"; do
@@ -145,13 +155,13 @@ create_config() {
     fi
     
     # Копирование конфигурационного файла
-    if [ -f "manager.conf" ]; then
-        cp "manager.conf" "$config_file"
+    if [ -f "openvpn/manager.conf" ]; then
+        cp "openvpn/manager.conf" "$config_file"
         chmod 644 "$config_file"
         echo -e "${GREEN}✓ Конфигурационный файл менеджера создан${NC}"
     else
-        echo -e "${RED}✗ Файл manager.conf не найден в текущей директории${NC}"
-        echo -e "${YELLOW}Создайте файл manager.conf перед установкой${NC}"
+        echo -e "${RED}✗ Файл openvpn/manager.conf не найден в текущей директории${NC}"
+        echo -e "${YELLOW}Создайте файл openvpn/manager.conf перед установкой${NC}"
         return 1
     fi
 }
@@ -181,16 +191,29 @@ setup_easyrsa() {
     fi
     
     # Создание vars файла
-    cat > "/etc/openvpn/easy-rsa/vars" << EOF
-set_var EASYRSA_REQ_COUNTRY    "US"
-set_var EASYRSA_REQ_PROVINCE   "California"
-set_var EASYRSA_REQ_CITY       "San Francisco"
-set_var EASYRSA_REQ_ORG        "OpenVPN"
-set_var EASYRSA_REQ_EMAIL      "admin@example.com"
-set_var EASYRSA_REQ_OU         "IT"
-set_var EASYRSA_KEY_SIZE       2048
-set_var EASYRSA_CA_EXPIRE      3650
-set_var EASYRSA_CERT_EXPIRE    3650
+    cat > "/etc/openvpn/easy-rsa/vars" << 'EOF'
+# Easy-RSA 3 parameter settings
+
+# Проверка корректного использования
+if [ -z "$EASYRSA_CALLER" ]; then
+        echo "You appear to be sourcing an Easy-RSA 'vars' file." >&2
+        echo "This is no longer necessary and is disallowed." >&2
+        return 1
+fi
+
+# Организационные данные для сертификатов
+set_var EASYRSA_REQ_COUNTRY     "NL"
+set_var EASYRSA_REQ_PROVINCE    "North Holland"
+set_var EASYRSA_REQ_CITY        "Amsterdam"
+set_var EASYRSA_REQ_ORG         "MSAV Co"
+set_var EASYRSA_REQ_EMAIL       "msav@msav.ru"
+set_var EASYRSA_REQ_OU          "Software Development NL Unit"
+
+# Параметры ключей и сертификатов
+set_var EASYRSA_KEY_SIZE        2048
+set_var EASYRSA_CA_EXPIRE       3650
+set_var EASYRSA_CERT_EXPIRE     3650
+set_var EASYRSA_DIGEST          "sha256"
 EOF
     
     chmod +x /etc/openvpn/easy-rsa/easyrsa
