@@ -133,6 +133,10 @@ init_pki() {
     ./easyrsa gen-req server nopass
     ./easyrsa sign-req server server
     
+    # Генерация TLS-ключа для дополнительной безопасности
+    echo -e "${BLUE}Генерация TLS-ключа...${NC}"
+    openvpn --genkey secret ta.key
+    
     # Создание директории ccd если не существует
     mkdir -p "$CCD_DIR"
     
@@ -148,6 +152,7 @@ init_pki() {
     cp pki/issued/server.crt "$SERVER_CERT"
     cp pki/private/server.key "$SERVER_KEY"
     cp pki/dh.pem "$DH_PARAMS"
+    cp ta.key "$TLS_KEY"
     
     echo -e "${GREEN}PKI успешно инициализирован${NC}"
     log_action "INIT_PKI" "SUCCESS"
@@ -222,9 +227,8 @@ remote-cert-tls server
 auth ${AUTH_ALG}
 data-ciphers ${CIPHER_LIST}
 tls-client
-tls-auth ta.key 1
 key-direction 1
-verb ${LOG_LEVEL}
+verb 3
 EOF
 
     # Добавление redirect-gateway если включено
@@ -473,6 +477,85 @@ check_configuration() {
     fi
 }
 
+# Функция перегенерации конфигурации клиента
+regenerate_client_config() {
+    local client_name=$1
+    
+    if [ -z "$client_name" ]; then
+        echo -e "${RED}Ошибка: Не указано имя клиента${NC}"
+        return 1
+    fi
+    
+    # Проверка существования сертификата
+    if [ ! -f "${EASYRSA_DIR}/pki/issued/${client_name}.crt" ]; then
+        echo -e "${RED}Клиент '$client_name' не найден${NC}"
+        return 1
+    fi
+    
+    # Проверка, что сертификат не отозван
+    if grep -q "R.*CN=$client_name" "${EASYRSA_DIR}/pki/index.txt" 2>/dev/null; then
+        echo -e "${RED}Сертификат клиента '$client_name' отозван${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Перегенерация конфигурации для клиента '$client_name'...${NC}"
+    
+    # Создание резервной копии старой конфигурации
+    local old_config="${CLIENT_CONFIG_DIR}/${client_name}.ovpn"
+    if [ -f "$old_config" ]; then
+        cp "$old_config" "${old_config}.backup.$(date +%Y%m%d_%H%M%S)"
+        echo -e "${YELLOW}Создана резервная копия старой конфигурации${NC}"
+    fi
+    
+    # Генерация новой конфигурации
+    generate_client_config "$client_name"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Конфигурация для клиента '$client_name' перегенерирована${NC}"
+        log_action "REGENERATE_CONFIG" "SUCCESS - $client_name"
+    else
+        echo -e "${RED}Ошибка при перегенерации конфигурации${NC}"
+        log_action "REGENERATE_CONFIG" "FAILED - $client_name"
+        return 1
+    fi
+}
+
+# Функция массовой перегенерации конфигураций
+regenerate_all_configs() {
+    echo -e "${BLUE}Массовая перегенерация конфигураций клиентов...${NC}"
+    
+    cd "$EASYRSA_DIR" || exit 1
+    
+    local success=0
+    local failed=0
+    local total=0
+    
+    # Получение списка активных клиентов
+    for cert in pki/issued/*.crt; do
+        if [ -f "$cert" ]; then
+            client=$(basename "$cert" .crt)
+            if [ "$client" != "server" ]; then
+                # Проверка, не отозван ли сертификат
+                if ! grep -q "R.*CN=$client" pki/index.txt 2>/dev/null; then
+                    ((total++))
+                    echo -e "${BLUE}Обработка клиента: $client${NC}"
+                    
+                    if regenerate_client_config "$client"; then
+                        ((success++))
+                    else
+                        ((failed++))
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    echo
+    echo -e "${GREEN}Обработано клиентов: $total${NC}"
+    echo -e "${GREEN}Успешно перегенерировано: $success${NC}"
+    [ $failed -gt 0 ] && echo -e "${RED}Ошибок: $failed${NC}"
+}
+
 # Главное меню
 show_menu() {
     echo
@@ -483,10 +566,12 @@ show_menu() {
     echo "4. Список клиентов"
     echo "5. Показать активные подключения"
     echo "6. Экспортировать конфигурацию клиента"
-    echo "7. Проверить конфигурацию"
-    echo "8. Создать резервную копию"
-    echo "9. Проверить статус сервера"
-    echo "10. Выход"
+    echo "7. Перегенерировать конфигурацию клиента"
+    echo "8. Перегенерировать все конфигурации"
+    echo "9. Проверить конфигурацию"
+    echo "10. Создать резервную копию"
+    echo "11. Проверить статус сервера"
+    echo "12. Выход"
     echo
 }
 
@@ -522,15 +607,27 @@ main() {
                 export_client_config "$client_name" "$export_path"
                 ;;
             7)
-                check_configuration
+                read -p "Введите имя клиента: " client_name
+                regenerate_client_config "$client_name"
                 ;;
             8)
-                backup_config
+                echo -e "${YELLOW}Внимание: Будут перегенерированы все конфигурации клиентов${NC}"
+                read -p "Продолжить? (y/n): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    regenerate_all_configs
+                fi
                 ;;
             9)
-                check_service_status
+                check_configuration
                 ;;
             10)
+                backup_config
+                ;;
+            11)
+                check_service_status
+                ;;
+            12)
                 echo -e "${GREEN}До свидания!${NC}"
                 exit 0
                 ;;

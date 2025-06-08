@@ -105,9 +105,8 @@ remote-cert-tls server
 auth ${AUTH_ALG}
 data-ciphers ${CIPHER_LIST}
 tls-client
-tls-auth ta.key 1
 key-direction 1
-verb ${LOG_LEVEL}
+verb 3
 EOF
 
     # Добавление дополнительных параметров
@@ -289,6 +288,51 @@ bulk_revoke() {
     fi
 }
 
+# Функция массовой перегенерации конфигураций
+bulk_regenerate_configs() {
+    echo -e "${BLUE}Массовая перегенерация конфигураций клиентов...${NC}"
+    
+    cd "$EASYRSA_DIR" || exit 1
+    
+    local success=0
+    local failed=0
+    local total=0
+    
+    # Получение списка активных клиентов
+    for cert in pki/issued/*.crt; do
+        if [ -f "$cert" ]; then
+            client=$(basename "$cert" .crt)
+            if [ "$client" != "server" ]; then
+                # Проверка, не отозван ли сертификат
+                if ! grep -q "R.*CN=$client" pki/index.txt 2>/dev/null; then
+                    ((total++))
+                    echo -e "${BLUE}Обработка клиента: $client${NC}"
+                    
+                    # Создание резервной копии старой конфигурации
+                    local old_config="${CLIENT_CONFIG_DIR}/${client}.ovpn"
+                    if [ -f "$old_config" ]; then
+                        cp "$old_config" "${old_config}.backup.$(date +%Y%m%d_%H%M%S)"
+                    fi
+                    
+                    # Генерация новой конфигурации
+                    if generate_config "$client"; then
+                        echo -e "${GREEN}  ✓ Конфигурация перегенерирована${NC}"
+                        ((success++))
+                    else
+                        echo -e "${RED}  ✗ Ошибка при перегенерации${NC}"
+                        ((failed++))
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    echo
+    echo -e "${GREEN}Обработано клиентов: $total${NC}"
+    echo -e "${GREEN}Успешно перегенерировано: $success${NC}"
+    [ $failed -gt 0 ] && echo -e "${RED}Ошибок: $failed${NC}"
+}
+
 # Экспорт всех конфигураций в архив
 export_all_configs() {
     local export_dir="${HOME}/openvpn_clients_$(date +%Y%m%d_%H%M%S)"
@@ -388,9 +432,10 @@ show_menu() {
     echo "1. Создать несколько клиентов (ввод списка)"
     echo "2. Импорт клиентов из CSV файла"
     echo "3. Массовый отзыв сертификатов"
-    echo "4. Экспорт всех конфигураций в архив"
-    echo "5. Генерировать отчет"
-    echo "6. Выход"
+    echo "4. Массовая перегенерация конфигураций"
+    echo "5. Экспорт всех конфигураций в архив"
+    echo "6. Генерировать отчет"
+    echo "7. Выход"
     echo
 }
 
@@ -412,12 +457,20 @@ main() {
                 bulk_revoke
                 ;;
             4)
-                export_all_configs
+                echo -e "${YELLOW}Внимание: Будут перегенерированы все конфигурации клиентов${NC}"
+                read -p "Продолжить? (y/n): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    bulk_regenerate_configs
+                fi
                 ;;
             5)
-                generate_report
+                export_all_configs
                 ;;
             6)
+                generate_report
+                ;;
+            7)
                 echo -e "${GREEN}До свидания!${NC}"
                 exit 0
                 ;;
